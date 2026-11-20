@@ -1,0 +1,8 @@
+{
+  "mobilenetv3": {
+    "status": "PASS",
+    "path": "/kaggle/working/secureface_lcc_nuaa/exports/mobilenetv3.onnx",
+    "max_abs_diff": 5.364418029785156e-07,
+    "bytes": 16810416
+  }
+}

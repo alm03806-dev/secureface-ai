@@ -1,0 +1,26 @@
+{
+  "counts": {
+    "client_train_raw.txt": {
+      "resolved": 1743,
+      "list_lines": 1743
+    },
+    "imposter_train_raw.txt": {
+      "resolved": 1748,
+      "list_lines": 1748
+    },
+    "client_test_raw.txt": {
+      "resolved": 3362,
+      "list_lines": 3362
+    },
+    "imposter_test_raw.txt": {
+      "resolved": 5761,
+      "list_lines": 5761
+    }
+  },
+  "errors": [],
+  "error_count": 0,
+  "physical_counts": {
+    "ClientRaw": 5105,
+    "ImposterRaw": 7509
+  }
+}

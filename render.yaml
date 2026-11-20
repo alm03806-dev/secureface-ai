@@ -1,0 +1,26 @@
+# Render Blueprint: the FastAPI backend (models included).
+services:
+  - type: web
+    name: secureface-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./docker/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      # v3 PAD model settings (see CHANGES_v3.md)
+      - key: PAD_THRESHOLD
+        value: "0.0851"
+      - key: PAD_CROP_MARGIN
+        value: "1.4"
+      # secrets: Render generates or asks for these; they never go in the repo
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FERNET_KEY
+        sync: false
+      - key: DEFAULT_ADMIN_USERNAME
+        value: admin
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: DEFAULT_ADMIN_EMAIL
+        value: admin@secureface.ai

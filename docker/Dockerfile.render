@@ -1,0 +1,19 @@
+# Backend image for Render (or any Docker host). Build context: repo root.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend /app/backend
+COPY exports /app/exports
+
+ENV PYTHONUNBUFFERED=1
+ENV PAD_MODEL_PATH=/app/exports/mobilenetv3.onnx
+
+# Render sets $PORT
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

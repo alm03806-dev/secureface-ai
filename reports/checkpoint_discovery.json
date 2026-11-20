@@ -1,0 +1,23 @@
+{
+  "mobilenetv3": {
+    "local_latest": false,
+    "local_best": false,
+    "source": null,
+    "latest": false,
+    "best": false
+  },
+  "lwflnet": {
+    "local_latest": false,
+    "local_best": false,
+    "source": null,
+    "latest": false,
+    "best": false
+  },
+  "ghostaff": {
+    "local_latest": false,
+    "local_best": false,
+    "source": null,
+    "latest": false,
+    "best": false
+  }
+}

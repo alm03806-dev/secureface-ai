@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=secureface-super-secret-jwt-key-2026-production-ready
+      - FERNET_KEY=b3h8K0T7y8XpWz6L2Mv1Q4R9sA7dF5gH3jK1lZ0xN8w=
+      - DEFAULT_ADMIN_USERNAME=admin
+      - DEFAULT_ADMIN_PASSWORD=SecureFace@2026
+    volumes:
+      - ./secureface.db:/app/secureface.db
+      - ./exports:/app/exports:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

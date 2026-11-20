@@ -1,0 +1,17 @@
+{
+  "train": {
+    "count": 8299,
+    "real": 1223,
+    "spoof": 7076
+  },
+  "val": {
+    "count": 2948,
+    "real": 405,
+    "spoof": 2543
+  },
+  "test": {
+    "count": 7580,
+    "real": 314,
+    "spoof": 7266
+  }
+}

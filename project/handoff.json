@@ -1,0 +1,47 @@
+{
+  "selected": "mobilenetv3",
+  "threshold": 0.0851,
+  "export_models": [
+    "mobilenetv3"
+  ],
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "image_size": 224,
+  "labels": {
+    "0": "live",
+    "1": "spoof"
+  },
+  "ensemble_weights": {
+    "mobilenetv3": 0.3333333333333333,
+    "lwflnet": 0.3333333333333333,
+    "ghostaff": 0.3333333333333333
+  },
+  "dataset_roots": {
+    "LCC": "/kaggle/input/datasets/faber24/lcc-fasd/LCC_FASD",
+    "NUAA": "/kaggle/input/datasets/mdalmahmudsiyam/nuaa-face/raw"
+  },
+  "protocol": "LCC train + NUAA train; threshold on LCC development; separate held-out tests",
+  "models_provenance": {
+    "mobilenetv3": "torchvision official architecture",
+    "lwflnet": "LwFLNet-inspired reconstruction; not exact authors reproduction",
+    "ghostaff": "GhostNet + adaptive fusion engineering reimplementation; not exact authors reproduction"
+  },
+  "export_ok": true,
+  "onnx_reports": {
+    "mobilenetv3": {
+      "status": "PASS",
+      "path": "/kaggle/working/secureface_lcc_nuaa/exports/mobilenetv3.onnx",
+      "max_abs_diff": 5.364418029785156e-07,
+      "bytes": 16810416
+    }
+  },
+  "note": "v3 model (LCC+NUAA+MSU+own camera). Feed a face crop (face box x 1.4). Old v1 model: exports/archive/mobilenetv3_lcc_nuaa_v1.onnx with threshold 0.905."
+}

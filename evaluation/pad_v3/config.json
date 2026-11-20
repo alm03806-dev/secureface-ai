@@ -1,0 +1,29 @@
+{
+  "QUICK_TEST": false,
+  "EPOCHS": 10,
+  "SAMPLES_PER_EPOCH": 12000,
+  "BATCH": 64,
+  "LR": 0.0003,
+  "WD": 0.0001,
+  "IMG": 224,
+  "SEED": 42,
+  "DEV_FRAC": 0.15,
+  "FACE_MARGIN": 1.4,
+  "TIME_BUDGET_MIN": 180,
+  "datasets": [
+    "LCC",
+    "NUAA",
+    "MSU",
+    "OWN"
+  ],
+  "torch": "2.11.0+cu130",
+  "gpu": "Tesla T4",
+  "final_pretrained_imagenet": true,
+  "final_init_checkpoint": null,
+  "final_threshold": 0.08509904146194458,
+  "final_threshold_source": "OWN dev sessions",
+  "final_threshold_pooled": 0.07211220264434814,
+  "final_threshold_live_friendly": 0.08509904146194458,
+  "onnx_max_abs_diff": 1.239776611328125e-05,
+  "minutes_total": 33.6
+}
