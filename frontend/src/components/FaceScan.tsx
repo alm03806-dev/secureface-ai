@@ -72,6 +72,7 @@ interface FaceScanProps {
   video: React.RefObject<HTMLVideoElement>;
   active: boolean;
   tone: ScanTone;
+  mirrored?: boolean;
   /** Called when a face appears or disappears. */
   onFace?: (found: boolean) => void;
   /** Every frame: face centre in the displayed box (0..1, already mirrored), or null. */
@@ -82,7 +83,7 @@ interface FaceScanProps {
  * Live 3D face mesh over the camera: 478 landmarks with depth shading,
  * a scan band sweeping down the face, colour driven by state.
  */
-export const FaceScan: React.FC<FaceScanProps> = ({ video, active, tone, onFace, onPose }) => {
+export const FaceScan: React.FC<FaceScanProps> = ({ video, active, tone, mirrored = true, onFace, onPose }) => {
   const canvas = useRef<HTMLCanvasElement>(null);
   const toneRef = useRef(tone);
   const faceRef = useRef(false);
@@ -158,8 +159,9 @@ export const FaceScan: React.FC<FaceScanProps> = ({ video, active, tone, onFace,
         {
           let sx = 0;
           for (const p of P) sx += p.x;
-          // canvas is mirrored on screen, so flip x
-          onPoseRef.current?.({ fx: 1 - sx / P.length / w, fy: (top + bottom) / 2 / h });
+          // canvas is mirrored on screen when using front camera, so flip x
+          const fx = mirrored ? 1 - sx / P.length / w : sx / P.length / w;
+          onPoseRef.current?.({ fx, fy: (top + bottom) / 2 / h });
         }
         const [r, g, b] = COLOR[toneRef.current];
         const busy = toneRef.current === 'scan';
@@ -237,5 +239,5 @@ export const FaceScan: React.FC<FaceScanProps> = ({ video, active, tone, onFace,
   }, [active, video]);
 
   // mirrored like the video
-  return <canvas ref={canvas} className="absolute inset-0 w-full h-full -scale-x-100 pointer-events-none" aria-hidden />;
+  return <canvas ref={canvas} className={`absolute inset-0 w-full h-full pointer-events-none ${mirrored ? '-scale-x-100' : ''}`} aria-hidden />;
 };

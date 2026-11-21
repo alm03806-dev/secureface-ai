@@ -39,6 +39,7 @@ export const dict = {
   chip_found: ['মুখ পাওয়া গেছে', 'Face found'],
   chip_none: ['মুখ ডিম্বাকার ঘরে আনুন', 'Bring your face into the oval'],
   from_photo: ['ছবি থেকে', 'From photo'],
+  cam_flip: ['ক্যামেরা পরিবর্তন করুন', 'Switch camera'],
 
   // scan stages
   st_scanning: ['মুখ খোঁজা হচ্ছে…', 'Looking for your face…'],

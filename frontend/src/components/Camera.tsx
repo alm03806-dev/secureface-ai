@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { CameraOff, ImageUp, RotateCw } from 'lucide-react';
+import { CameraOff, ImageUp, RotateCw, SwitchCamera } from 'lucide-react';
 import { FaceScan } from './FaceScan';
 import { Tilt, Pose } from './Tilt';
 import { usePrefs } from '../context/PrefsContext';
@@ -26,6 +26,10 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
   const { t } = usePrefs();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const isStartingRef = useRef(false);
+
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [active, setActive] = useState(false);
   const [error, setError] = useState(false);
   const [face, setFace] = useState(false);
@@ -50,47 +54,150 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
     [onFace],
   );
 
-  const start = useCallback(async () => {
-    setError(false);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: false,
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((tr) => {
+        try {
+          tr.stop();
+        } catch {
+          /* ignore */
+        }
       });
-      const v = videoRef.current;
-      if (!v) return;
-      v.srcObject = stream;
-      v.onloadedmetadata = () => {
-        v.play();
-        setActive(true);
-      };
-    } catch {
-      setActive(false);
-      setError(true);
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   }, []);
 
-  const stop = useCallback(() => {
-    const v = videoRef.current;
-    if (v?.srcObject) {
-      (v.srcObject as MediaStream).getTracks().forEach((tr) => tr.stop());
-      v.srcObject = null;
-    }
-  }, []);
+  const start = useCallback(
+    async (mode: 'user' | 'environment' = facingMode) => {
+      if (isStartingRef.current) return;
+      isStartingRef.current = true;
+      setError(false);
+
+      // Clean up previous stream so mobile/browser releases hardware camera
+      stopStream();
+
+      try {
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+              facingMode: { ideal: mode },
+            },
+            audio: false,
+          });
+        } catch {
+          // Fallback if ideal constraints fail on desktop webcam
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false,
+          });
+        }
+
+        streamRef.current = stream;
+        const v = videoRef.current;
+        if (!v) {
+          // Video element unmounted while awaiting stream
+          stream.getTracks().forEach((tr) => tr.stop());
+          streamRef.current = null;
+          isStartingRef.current = false;
+          return;
+        }
+
+        v.srcObject = stream;
+
+        const playVideo = async () => {
+          try {
+            await v.play();
+          } catch {
+            /* autoplay restrictions or interrupted */
+          }
+          setActive(true);
+          setError(false);
+        };
+
+        if (v.readyState >= 1) {
+          playVideo();
+        } else {
+          v.onloadedmetadata = () => playVideo();
+        }
+
+        // Failsafe timer: in case onloadedmetadata doesn't fire on mobile
+        setTimeout(() => {
+          if (v.srcObject && !active) {
+            playVideo();
+          }
+        }, 300);
+      } catch (err) {
+        console.warn('Unable to access camera:', err);
+        setActive(false);
+        setError(true);
+      } finally {
+        isStartingRef.current = false;
+      }
+    },
+    [facingMode, stopStream, active],
+  );
+
+  const switchCamera = useCallback(() => {
+    const nextMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(nextMode);
+    start(nextMode);
+  }, [facingMode, start]);
 
   useEffect(() => {
-    start();
-    return stop;
-  }, [start, stop]);
+    start(facingMode);
+    return () => {
+      stopStream();
+    };
+  }, [start, facingMode, stopStream]);
+
+  // Keep camera alive across tab switching, file picker return, or phone lock
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const v = videoRef.current;
+        if (v) {
+          const stream = streamRef.current;
+          const liveTracks = stream?.getVideoTracks().filter((tr) => tr.readyState === 'live') ?? [];
+          if (liveTracks.length === 0) {
+            start(facingMode);
+          } else if (v.paused) {
+            v.play().catch(() => {});
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
+  }, [start, facingMode]);
 
   useImperativeHandle(ref, () => ({
     capture: () => {
       const v = videoRef.current;
-      if (!v || !active) return null;
+      if (!v) return null;
+      if (v.paused) {
+        v.play().catch(() => {});
+      }
+      const w = v.videoWidth || 640;
+      const h = v.videoHeight || 480;
+      if (w === 0 || h === 0) return null;
+
       const c = document.createElement('canvas');
-      c.width = v.videoWidth || 640;
-      c.height = v.videoHeight || 480;
-      c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height);
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(v, 0, 0, w, h);
       return c.toDataURL('image/jpeg', 0.92);
     },
     pickFile: () => fileRef.current?.click(),
@@ -108,6 +215,7 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
   // Face ID style push-in towards the face while scanning
   const zoom = busy && face;
   const origin = `${(centre.current.fx * 100).toFixed(1)}% ${(centre.current.fy * 100).toFixed(1)}%`;
+  const isFront = facingMode === 'user';
 
   return (
     <Tilt max={6} poseRef={poseRef} glare innerClassName="rounded-4xl">
@@ -124,10 +232,23 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
             autoPlay
             playsInline
             muted
-            className={`w-full h-full object-cover -scale-x-100 transition-opacity duration-500 ${active ? 'opacity-100' : 'opacity-0'}`}
+            className={`w-full h-full object-cover transition-opacity duration-500 ${isFront ? '-scale-x-100' : ''} ${active ? 'opacity-100' : 'opacity-0'}`}
           />
-          <FaceScan video={videoRef} active={active} tone={busy ? 'scan' : tone} onFace={handleFace} onPose={handlePose} />
+          <FaceScan video={videoRef} active={active} tone={busy ? 'scan' : tone} mirrored={isFront} onFace={handleFace} onPose={handlePose} />
         </div>
+
+        {/* Camera switch button (Front / Back) */}
+        {active && (
+          <button
+            type="button"
+            onClick={switchCamera}
+            className="absolute top-4 right-4 z-20 flex items-center justify-center w-10 h-10 rounded-full bg-black/45 hover:bg-black/70 text-white/90 hover:text-white border border-white/20 backdrop-blur-md transition-all active:scale-90 shadow-md cursor-pointer"
+            title={t('cam_flip')}
+            aria-label={t('cam_flip')}
+          >
+            <SwitchCamera className="w-5 h-5" aria-hidden />
+          </button>
+        )}
 
         {/* soft vignette */}
         {active && (
@@ -161,16 +282,17 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
             <CameraOff className="w-10 h-10 text-white/50" aria-hidden />
             <p className="text-sm text-white/80 max-w-xs leading-relaxed">{error ? t('cam_error') : t('cam_starting')}</p>
-            {error && (
-              <div className="flex gap-2">
-                <button onClick={start} className="btn bg-white/15 text-white hover:bg-white/25 min-h-[44px] px-4 text-sm">
-                  <RotateCw className="w-4 h-4" aria-hidden /> {t('cam_retry')}
-                </button>
-                <button onClick={() => fileRef.current?.click()} className="btn bg-white text-[#1c1c1e] min-h-[44px] px-4 text-sm">
-                  <ImageUp className="w-4 h-4" aria-hidden /> {t('cam_upload')}
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              <button onClick={() => start(facingMode)} className="btn bg-white/15 text-white hover:bg-white/25 min-h-[44px] px-4 text-sm">
+                <RotateCw className="w-4 h-4" aria-hidden /> {t('cam_retry')}
+              </button>
+              <button onClick={switchCamera} className="btn bg-white/15 text-white hover:bg-white/25 min-h-[44px] px-4 text-sm">
+                <SwitchCamera className="w-4 h-4" aria-hidden /> {t('cam_flip')}
+              </button>
+              <button onClick={() => fileRef.current?.click()} className="btn bg-white text-[#1c1c1e] min-h-[44px] px-4 text-sm">
+                <ImageUp className="w-4 h-4" aria-hidden /> {t('cam_upload')}
+              </button>
+            </div>
           </div>
         )}
       </div>
