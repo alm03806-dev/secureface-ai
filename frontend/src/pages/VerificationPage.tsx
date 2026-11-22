@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ScanFace, ImageUp, UserPlus, RotateCw } from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 import { usePrefs } from '../context/PrefsContext';
+import { useAuth } from '../context/AuthContext';
 import { biometricsApi, VerifyResponse } from '../api/biometricsApi';
 import { Camera, CameraHandle } from '../components/Camera';
 import { StatusPanel, Tone } from '../components/StatusPanel';
@@ -44,11 +45,18 @@ const STAGE: Partial<Record<MascotState, Key>> = {
 export const VerificationPage: React.FC<{ go: (t: Tab) => void }> = ({ go }) => {
   const { playSuccess, playAlert } = useSound();
   const { t } = usePrefs();
+  const { currentUser } = useAuth();
   const cam = useRef<CameraHandle>(null);
   const flow = useScanFlow();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(currentUser?.username ?? '');
   const [result, setResult] = useState<View | null>(null);
   const [face, setFace] = useState(false);
+
+  useEffect(() => {
+    if (currentUser?.username && !name) {
+      setName(currentUser.username);
+    }
+  }, [currentUser]);
 
   const verify = async (image: string | null) => {
     if (!image) {

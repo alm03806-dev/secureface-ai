@@ -27,7 +27,6 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const isStartingRef = useRef(false);
 
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [active, setActive] = useState(false);
@@ -56,9 +55,9 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((tr) => {
+      streamRef.current.getTracks().forEach((track) => {
         try {
-          tr.stop();
+          track.stop();
         } catch {
           /* ignore */
         }
@@ -68,95 +67,117 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setActive(false);
   }, []);
 
-  const start = useCallback(
-    async (mode: 'user' | 'environment' = facingMode) => {
-      if (isStartingRef.current) return;
-      isStartingRef.current = true;
-      setError(false);
+  const startStream = useCallback(async (mode: 'user' | 'environment') => {
+    // 1. Cleanly stop previous tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          /* ignore */
+        }
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
 
-      // Clean up previous stream so mobile/browser releases hardware camera
-      stopStream();
+    // 2. Hardware release pause (crucial for mobile & Windows webcam drivers)
+    await new Promise((r) => setTimeout(r, 120));
 
+    try {
+      let stream: MediaStream;
       try {
-        let stream: MediaStream;
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            facingMode: { ideal: mode },
+          },
+          audio: false,
+        });
+      } catch {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 },
-              facingMode: { ideal: mode },
-            },
+            video: { facingMode: mode },
             audio: false,
           });
         } catch {
-          // Fallback if ideal constraints fail on desktop webcam
           stream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 } },
             audio: false,
           });
         }
+      }
 
-        streamRef.current = stream;
-        const v = videoRef.current;
-        if (!v) {
-          // Video element unmounted while awaiting stream
-          stream.getTracks().forEach((tr) => tr.stop());
-          streamRef.current = null;
-          isStartingRef.current = false;
-          return;
+      streamRef.current = stream;
+      const v = videoRef.current;
+      if (!v) {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        return;
+      }
+
+      v.srcObject = stream;
+
+      const onVideoReady = async () => {
+        try {
+          await v.play();
+        } catch (e) {
+          console.warn('Autoplay prevented:', e);
         }
+        setActive(true);
+        setError(false);
+      };
 
-        v.srcObject = stream;
+      if (v.readyState >= 2) {
+        onVideoReady();
+      } else {
+        v.onloadedmetadata = () => onVideoReady();
+        v.oncanplay = () => onVideoReady();
+      }
 
-        const playVideo = async () => {
-          try {
-            await v.play();
-          } catch {
-            /* autoplay restrictions or interrupted */
-          }
+      // Safety timeout in case events are missed
+      setTimeout(() => {
+        if (v && v.srcObject && !v.paused) {
           setActive(true);
           setError(false);
-        };
-
-        if (v.readyState >= 1) {
-          playVideo();
-        } else {
-          v.onloadedmetadata = () => playVideo();
         }
-
-        // Failsafe timer: in case onloadedmetadata doesn't fire on mobile
-        setTimeout(() => {
-          if (v.srcObject && !active) {
-            playVideo();
-          }
-        }, 300);
-      } catch (err) {
-        console.warn('Unable to access camera:', err);
-        setActive(false);
-        setError(true);
-      } finally {
-        isStartingRef.current = false;
-      }
-    },
-    [facingMode, stopStream, active],
-  );
+      }, 350);
+    } catch (err) {
+      console.error('Camera access error:', err);
+      setActive(false);
+      setError(true);
+    }
+  }, []);
 
   const switchCamera = useCallback(() => {
-    const nextMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(nextMode);
-    start(nextMode);
-  }, [facingMode, start]);
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+  }, []);
 
+  // Main lifecycle: ONLY runs on mount or when facingMode actually changes
   useEffect(() => {
-    start(facingMode);
-    return () => {
-      stopStream();
-    };
-  }, [start, facingMode, stopStream]);
+    let unmounted = false;
 
-  // Keep camera alive across tab switching, file picker return, or phone lock
+    startStream(facingMode);
+
+    return () => {
+      unmounted = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [facingMode, startStream]);
+
+  // Keep camera alive across tab switching or mobile app switching
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -165,9 +186,9 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
           const stream = streamRef.current;
           const liveTracks = stream?.getVideoTracks().filter((tr) => tr.readyState === 'live') ?? [];
           if (liveTracks.length === 0) {
-            start(facingMode);
+            startStream(facingMode);
           } else if (v.paused) {
-            v.play().catch(() => { });
+            v.play().catch(() => {});
           }
         }
       }
@@ -179,14 +200,14 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleVisibility);
     };
-  }, [start, facingMode]);
+  }, [facingMode, startStream]);
 
   useImperativeHandle(ref, () => ({
     capture: () => {
       const v = videoRef.current;
       if (!v) return null;
       if (v.paused) {
-        v.play().catch(() => { });
+        v.play().catch(() => {});
       }
       const w = v.videoWidth || 640;
       const h = v.videoHeight || 480;
@@ -283,7 +304,7 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
             <CameraOff className="w-10 h-10 text-white/50" aria-hidden />
             <p className="text-sm text-white/80 max-w-xs leading-relaxed">{error ? t('cam_error') : t('cam_starting')}</p>
             <div className="flex gap-2">
-              <button onClick={() => start(facingMode)} className="btn bg-white/15 text-white hover:bg-white/25 min-h-[44px] px-4 text-sm">
+              <button onClick={() => startStream(facingMode)} className="btn bg-white/15 text-white hover:bg-white/25 min-h-[44px] px-4 text-sm">
                 <RotateCw className="w-4 h-4" aria-hidden /> {t('cam_retry')}
               </button>
               <button onClick={switchCamera} className="btn bg-white/15 text-white hover:bg-white/25 min-h-[44px] px-4 text-sm">

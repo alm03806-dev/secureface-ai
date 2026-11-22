@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 import numpy as np
 
 from backend.app.core.database import get_db
@@ -281,7 +282,10 @@ def verify_biometric(
     matched_template: Optional[BiometricTemplate] = None
 
     if payload.claimed_username:
-        claimed_user = db.query(User).filter(User.username == payload.claimed_username.strip()).first()
+        ident = payload.claimed_username.strip().lower()
+        claimed_user = db.query(User).filter(
+            or_(func.lower(User.username) == ident, func.lower(User.email) == ident)
+        ).first()
         if not claimed_user or not claimed_user.biometric_template:
             log = VerificationLog(
                 claimed_identifier=payload.claimed_username,
