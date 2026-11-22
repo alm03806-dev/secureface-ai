@@ -3,7 +3,8 @@ import axios from 'axios';
 import { demoAdapter } from './demo';
 import { IS_DEMO } from '../lib/asset';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const DEFAULT_PROD_API = 'https://secureface-api-tlwl.onrender.com';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? DEFAULT_PROD_API : '')).replace(/\/+$/, '');
 
 export const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api`,
