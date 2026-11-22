@@ -167,7 +167,7 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
           if (liveTracks.length === 0) {
             start(facingMode);
           } else if (v.paused) {
-            v.play().catch(() => {});
+            v.play().catch(() => { });
           }
         }
       }
@@ -186,7 +186,7 @@ export const Camera = forwardRef<CameraHandle, CameraProps>(({ busy = false, ton
       const v = videoRef.current;
       if (!v) return null;
       if (v.paused) {
-        v.play().catch(() => {});
+        v.play().catch(() => { });
       }
       const w = v.videoWidth || 640;
       const h = v.videoHeight || 480;

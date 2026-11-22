@@ -1,6 +1,7 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 from backend.app.core.database import get_db
 from backend.app.core.security import verify_password, get_password_hash, create_access_token
 from backend.app.core.config import settings
@@ -13,13 +14,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register(user_in: UserRegister, db: Session = Depends(get_db)):
-    # Check if username or email already exists
-    if db.query(User).filter(User.username == user_in.username).first():
+    clean_username = user_in.username.strip()
+    clean_email = user_in.email.strip().lower()
+
+    # Check if username or email already exists (case-insensitive)
+    if db.query(User).filter(func.lower(User.username) == clean_username.lower()).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already taken."
         )
-    if db.query(User).filter(User.email == user_in.email).first():
+    if db.query(User).filter(func.lower(User.email) == clean_email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered."
@@ -31,8 +35,8 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
         assigned_role = "admin"
 
     user = User(
-        username=user_in.username.strip(),
-        email=user_in.email.strip().lower(),
+        username=clean_username,
+        email=clean_email,
         full_name=user_in.full_name,
         hashed_password=get_password_hash(user_in.password),
         role=assigned_role,
@@ -53,7 +57,11 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(user_in: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == user_in.username.strip()).first()
+    identifier = user_in.username.strip().lower()
+    # Support login with either username or email (case-insensitive)
+    user = db.query(User).filter(
+        or_(func.lower(User.username) == identifier, func.lower(User.email) == identifier)
+    ).first()
     if not user or not verify_password(user_in.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
